@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1,user-scalable=no">
+<title>Карта дорог Молдовы 2.0</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* TOP BAR */
+#topbar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border-bottom:1px solid #ddd;box-shadow:0 1px 4px rgba(0,0,0,.08);z-index:1000;flex-shrink:0}
+#topbar h1{font-size:15px;font-weight:600;color:#1a3a26;white-space:nowrap}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;background:#e6f4ea;color:#1a7a3a;font-weight:500}
+
+/* SEARCH */
+.search-wrap{position:relative;width:280px}
+.search-wrap input{width:100%;padding:7px 12px 7px 32px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#fafafa}
+.search-wrap input:focus{outline:none;border-color:#2d7d46;background:#fff}
+.search-wrap .si{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#888;font-size:14px}
+.search-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;margin-top:4px;max-height:280px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:2500;display:none}
+.sr-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0}
+.sr-item:hover{background:#f5f9f5}
+.sr-name{font-weight:600;color:#1a1a1a}
+.sr-type{font-size:10px;color:#888;margin-top:2px}
+
+.btn{font-size:13px;padding:7px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#f5f5f5}
+.btn-green{background:#2d7d46;color:#fff;border-color:#2d7d46}
+.btn-green:hover{background:#236038}
+.btn-cancel{background:#c0392b;color:#fff;border-color:#c0392b}
+
+#map{flex:1;position:relative}
+
+/* MAP CONTROLS - left side */
+#map-controls{position:absolute;top:12px;left:12px;background:#fff;border-radius:10px;padding:5px;box-shadow:0 2px 12px rgba(0,0,0,.15);z-index:1000;display:flex;flex-direction:column;gap:3px}
+.mc-btn{width:36px;height:36px;border:none;background:transparent;cursor:pointer;border-radius:7px;font-size:18px;color:#444;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.mc-btn:hover{background:#f0f0f0}
+.mc-btn.active{background:#2d7d46;color:#fff}
+
+/* LAYER PICKER */
+#layer-picker{position:absolute;top:12px;left:60px;background:#fff;border-radius:10px;padding:10px;box-shadow:0 2px 12px rgba(0,0,0,.15);z-index:1000;display:none;min-width:170px}
+.lp-title{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:8px;letter-spacing:.4px}
+.lp-item{padding:7px 9px;cursor:pointer;font-size:12px;border-radius:6px;display:flex;align-items:center;gap:7px;transition:background .1s}
+.lp-item:hover{background:#f5f9f5}
+.lp-item.active{background:#e6f4ea;color:#1a3a26;font-weight:600}
+.lp-dot{width:10px;height:10px;border-radius:50%;background:#ddd;flex-shrink:0}
+.lp-item.active .lp-dot{background:#2d7d46}
+
+/* MEASURE INFO */
+#measure-info{position:absolute;top:60px;left:60px;background:#1a3a26;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;z-index:1000;display:none;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+
+/* BANNER */
+#banner{position:fixed;top:62px;left:50%;transform:translateX(-50%);background:rgba(26,58,38,.94);color:#fff;font-size:13px;font-weight:500;padding:9px 22px;border-radius:24px;z-index:2000;display:none;pointer-events:none;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+
+/* MODAL */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:3000}
+#modal-box{background:#fff;border-radius:16px;padding:22px 24px;width:340px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.25);position:relative}
+#modal-box h3{font-size:15px;font-weight:600;margin-bottom:3px;color:#1a3a26}
+.m-sub{font-size:11px;color:#888;margin-bottom:10px}
+.m-coord{font-size:11px;color:#2d7d46;font-weight:600;margin-bottom:14px;padding:6px 10px;background:#e6f4ea;border-radius:6px;display:inline-block}
+.fl{display:block;font-size:12px;color:#555;font-weight:600;margin:12px 0 6px}
+.prob-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px}
+.prob-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;border:2px solid #eee;background:#fafafa;cursor:pointer;font-size:13px;color:#333;transition:all .15s;text-align:left}
+.prob-btn:hover{border-color:#bbb;background:#f0f0f0}
+.prob-btn.selected{border-color:#2d7d46;background:#e6f4ea;color:#1a3a26;font-weight:600}
+.prob-btn .ico{font-size:20px;line-height:1}
+.sev-row{display:flex;gap:6px}
+.sev-btn{flex:1;padding:7px 4px;border-radius:8px;border:2px solid #eee;background:#fafafa;cursor:pointer;font-size:12px;font-weight:600;text-align:center;transition:all .15s}
+.sev-btn:hover{border-color:#bbb}
+.sev-btn.sel-low{border-color:#f5c842;background:#fffbe6;color:#b8860b}
+.sev-btn.sel-mid{border-color:#e07030;background:#fff0e6;color:#c05820}
+.sev-btn.sel-high{border-color:#c0392b;background:#fde8e8;color:#c0392b}
+textarea,input[type=text]{width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#fafafa;color:#1a1a1a;font-family:inherit;resize:none}
+.mact{display:flex;gap:8px;margin-top:14px}
+#mcls{position:absolute;top:12px;right:14px;background:none;border:none;cursor:pointer;font-size:22px;color:#aaa;line-height:1}
+
+/* RIGHT PANEL */
+#panel{position:fixed;top:62px;right:10px;background:#fff;border-radius:12px;width:240px;box-shadow:0 2px 14px rgba(0,0,0,.13);border:1px solid #e0e0e0;z-index:1500;display:flex;flex-direction:column;max-height:calc(100vh - 82px)}
+#ph{padding:10px 14px;border-bottom:1px solid #eee;font-size:12px;font-weight:600;color:#555;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+#pcnt{font-size:11px;background:#f0f0f0;padding:2px 8px;border-radius:20px}
+#filter-bar{padding:8px 12px;border-bottom:1px solid #eee;display:flex;gap:4px;flex-wrap:wrap}
+.fil-btn{font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid #ddd;background:#fafafa;cursor:pointer;color:#666}
+.fil-btn.active{background:#1a3a26;color:#fff;border-color:#1a3a26}
+#plist{flex:1;overflow-y:auto}
+.pi{padding:9px 14px;border-bottom:1px solid #f5f5f5;cursor:pointer;display:flex;align-items:flex-start;gap:9px;transition:background .1s}
+.pi:hover{background:#fafafa}
+.pi-ico{font-size:22px;line-height:1;flex-shrink:0;margin-top:1px}
+.pi-body{flex:1;min-width:0}
+.pi-name{font-size:12px;font-weight:600;color:#222}
+.pi-sev{font-size:10px;font-weight:700;margin-left:5px}
+.pi-m{font-size:10px;color:#888;margin-top:2px}
+.pi-c{font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* LEGEND */
+#legend{position:fixed;bottom:20px;left:60px;background:#fff;border-radius:10px;padding:11px 14px;box-shadow:0 2px 10px rgba(0,0,0,.12);border:1px solid #e0e0e0;z-index:1500;max-width:200px}
+.lt{font-size:10px;font-weight:700;color:#555;margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px}
+.lr{display:flex;align-items:center;gap:7px;font-size:11px;color:#444;margin-bottom:4px}
+
+/* FAB - main action button */
+#fab{position:fixed;bottom:20px;right:20px;background:#2d7d46;color:#fff;font-size:14px;font-weight:600;padding:14px 24px;border-radius:30px;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(45,125,70,.4);z-index:1500;display:flex;align-items:center;gap:8px;transition:all .2s}
+#fab:hover{background:#236038;box-shadow:0 6px 20px rgba(45,125,70,.5);transform:translateY(-1px)}
+#fab.cancel{background:#c0392b;box-shadow:0 4px 16px rgba(192,57,43,.4)}
+#fab.cancel:hover{background:#a02818}
+
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#2d7d46;color:#fff;font-size:13px;padding:10px 22px;border-radius:8px;display:none;z-index:4000;box-shadow:0 4px 14px rgba(0,0,0,.2);font-weight:500}
+
+/* MOBILE */
+@media (max-width:768px){
+  #topbar{padding:8px 10px;flex-wrap:wrap}
+  #topbar h1{font-size:13px}
+  .search-wrap{width:100%;order:10;margin-top:6px}
+  #panel{width:calc(100% - 20px);right:10px;top:auto;bottom:80px;max-height:35vh}
+  #legend{display:none}
+  #map-controls{top:auto;bottom:80px;left:10px}
+  #layer-picker{top:auto;bottom:80px;left:54px}
+  #fab{padding:12px 18px;font-size:13px}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>🇲🇩 Карта дорог Молдовы</h1>
+  <span class="badge" id="live-badge">● Загрузка...</span>
+  <div class="search-wrap">
+    <span class="si">🔍</span>
+    <input type="text" id="search-input" placeholder="Кишинёв, M1, Бельцы..." autocomplete="off">
+    <div class="search-results" id="search-results"></div>
+  </div>
+  <div style="flex:1"></div>
+</div>
+
+<div id="map"></div>
+
+<!-- Map controls (left side) -->
+<div id="map-controls">
+  <button class="mc-btn" id="layer-btn" onclick="toggleLayerPicker()" title="Слои карты">🗺️</button>
+  <button class="mc-btn" id="locate-btn" onclick="locateMe()" title="Моё местоположение">📍</button>
+  <button class="mc-btn" id="measure-btn" onclick="toggleMeasure()" title="Измерить расстояние">📏</button>
+  <button class="mc-btn" id="home-btn" onclick="resetView()" title="Вся Молдова">🏠</button>
+</div>
+
+<div id="layer-picker">
+  <div class="lp-title">Подложка карты</div>
+  <div class="lp-item active" data-layer="osm" onclick="setLayer('osm')">
+    <div class="lp-dot"></div>OpenStreetMap
+  </div>
+  <div class="lp-item" data-layer="satellite" onclick="setLayer('satellite')">
+    <div class="lp-dot"></div>Спутник
+  </div>
+  <div class="lp-item" data-layer="topo" onclick="setLayer('topo')">
+    <div class="lp-dot"></div>Топография
+  </div>
+  <div class="lp-item" data-layer="dark" onclick="setLayer('dark')">
+    <div class="lp-dot"></div>Тёмная
+  </div>
+</div>
+
+<div id="measure-info"></div>
+<div id="banner"></div>
+
+<!-- Right panel -->
+<div id="panel">
+  <div id="ph">Проблемы на дорогах <span id="pcnt">0</span></div>
+  <div id="filter-bar">
+    <button class="fil-btn active" data-filter="all" onclick="setFilter('all',this)">Все</button>
+    <button class="fil-btn" data-filter="pothole" onclick="setFilter('pothole',this)">🕳️ Ямы</button>
+    <button class="fil-btn" data-filter="high" onclick="setFilter('high',this)">🔴 Опасно</button>
+  </div>
+  <div id="plist">
+    <div style="padding:20px 14px;font-size:11px;color:#aaa;text-align:center;line-height:1.8">Загрузка...</div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="lt">Типы проблем</div>
+  <div class="lr">🕳️ Яма</div>
+  <div class="lr">🚧 Нет разметки</div>
+  <div class="lr">⛔ Объезд</div>
+  <div class="lr">🌊 Затопление</div>
+  <div class="lr">🏗️ Ремонт</div>
+  <div class="lr">🚗 Авария</div>
+  <div class="lr">〰️ Неровности</div>
+  <div class="lr">❗ Другое</div>
+</div>
+
+<!-- FAB -->
+<button id="fab" onclick="toggleDraw()">
+  <span id="fab-ico">⚠️</span>
+  <span id="fab-text">Сообщить о проблеме</span>
+</button>
+
+<!-- Modal -->
+<div id="modal">
+  <div id="modal-box">
+    <button id="mcls" onclick="closeModal()">×</button>
+    <h3>Сообщить о проблеме</h3>
+    <div class="m-sub">Ваш отзыв увидят все пользователи</div>
+    <div class="m-coord" id="modal-coord"></div>
+
+    <span class="fl">Тип проблемы</span>
+    <div class="prob-grid">
+      <button class="prob-btn" data-type="pothole" onclick="selectType(this)"><span class="ico">🕳️</span> Яма</button>
+      <button class="prob-btn" data-type="marking" onclick="selectType(this)"><span class="ico">🚧</span> Нет разметки</button>
+      <button class="prob-btn" data-type="detour" onclick="selectType(this)"><span class="ico">⛔</span> Объезд</button>
+      <button class="prob-btn" data-type="flood" onclick="selectType(this)"><span class="ico">🌊</span> Затопление</button>
+      <button class="prob-btn" data-type="construction" onclick="selectType(this)"><span class="ico">🏗️</span> Ремонт</button>
+      <button class="prob-btn" data-type="accident" onclick="selectType(this)"><span class="ico">🚗</span> Авария</button>
+      <button class="prob-btn" data-type="bump" onclick="selectType(this)"><span class="ico">〰️</span> Неровности</button>
+      <button class="prob-btn" data-type="other" onclick="selectType(this)"><span class="ico">❗</span> Другое</button>
+    </div>
+    <div style="font-size:11px;color:#c0392b;min-height:14px;margin-top:2px" id="type-err"></div>
+
+    <span class="fl">Серьёзность</span>
+    <div class="sev-row">
+      <button class="sev-btn" data-sev="low" onclick="selectSev(this)">🟡 Небольшая</button>
+      <button class="sev-btn" data-sev="mid" onclick="selectSev(this)">🟠 Средняя</button>
+      <button class="sev-btn" data-sev="high" onclick="selectSev(this)">🔴 Опасно!</button>
+    </div>
+    <div style="font-size:11px;color:#c0392b;min-height:14px;margin-top:2px" id="sev-err"></div>
+
+    <span class="fl">Комментарий (необязательно)</span>
+    <textarea id="fcmt" rows="2" placeholder="Опишите проблему подробнее..."></textarea>
+    <span class="fl">Ваше имя</span>
+    <input type="text" id="fname" placeholder="Можно оставить пустым">
+    <div class="mact">
+      <button class="btn" onclick="closeModal()" style="flex:1">Отмена</button>
+      <button class="btn btn-green" id="submit-btn" onclick="savePin()" style="flex:2">Отправить ↗</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════
+const TYPES = {
+  pothole:{label:'Яма',ico:'🕳️'}, marking:{label:'Нет разметки',ico:'🚧'},
+  detour:{label:'Объезд',ico:'⛔'}, flood:{label:'Затопление',ico:'🌊'},
+  construction:{label:'Ремонт',ico:'🏗️'}, accident:{label:'Авария',ico:'🚗'},
+  bump:{label:'Неровности',ico:'〰️'}, other:{label:'Другое',ico:'❗'},
+};
+const SEV = {
+  low:{label:'Небольшая',color:'#f5c842',bg:'#fffbe6'},
+  mid:{label:'Средняя',color:'#e07030',bg:'#fff0e6'},
+  high:{label:'Опасно!',color:'#c0392b',bg:'#fde8e8'},
+};
+
+const FIRST_NAMES = ['Ион','Андрей','Михай','Виктор','Сергей','Дмитрий','Раду','Влад','Алексей','Николае','Кристиан','Габриэл','Богдан','Александру','Думитру','Василе','Григоре','Штефан','Мария','Елена','Алина','Ирина','Наталья','Ольга','Татьяна','Олеся','Дойна','Габриэла','Ливия','Сильвия','Лилия','Корина','Виорика','Стелла','Ана','Кристина'];
+const LAST_INITIALS = ['А.','Б.','В.','Г.','Д.','М.','К.','П.','Р.','С.','Т.','Ф.','Ч.','Ш.','Л.','Н.'];
+function randomName(){return FIRST_NAMES[Math.floor(Math.random()*FIRST_NAMES.length)]+' '+LAST_INITIALS[Math.floor(Math.random()*LAST_INITIALS.length)];}
+
+// Moldova cities and roads (for search)
+const PLACES = [
+  {name:'Кишинёв',type:'Столица',lat:47.0105,lng:28.8638,zoom:13},
+  {name:'Бельцы',type:'Город',lat:47.7576,lng:27.9288,zoom:13},
+  {name:'Тирасполь',type:'Город',lat:46.8439,lng:29.6088,zoom:13},
+  {name:'Кагул',type:'Город',lat:45.9047,lng:28.2174,zoom:13},
+  {name:'Сорока',type:'Город',lat:48.1551,lng:28.2861,zoom:13},
+  {name:'Унгены',type:'Город',lat:46.8291,lng:27.7899,zoom:13},
+  {name:'Орхей',type:'Город',lat:47.3817,lng:28.9903,zoom:13},
+  {name:'Комрат',type:'Город',lat:46.2978,lng:28.6594,zoom:13},
+  {name:'Дубоссары',type:'Город',lat:47.2642,lng:29.1567,zoom:13},
+  {name:'Рыбница',type:'Город',lat:47.7639,lng:29.0089,zoom:13},
+  {name:'Хынчешть',type:'Город',lat:46.8330,lng:28.5895,zoom:13},
+  {name:'Страшены',type:'Город',lat:47.1422,lng:28.6086,zoom:13},
+  {name:'Чимишлия',type:'Город',lat:46.5208,lng:28.7639,zoom:13},
+  {name:'Флорешты',type:'Город',lat:47.8919,lng:28.2944,zoom:13},
+  {name:'Единец',type:'Город',lat:48.1683,lng:27.2978,zoom:13},
+  {name:'Кахул',type:'Город',lat:45.9047,lng:28.2174,zoom:13},
+  {name:'Резина',type:'Город',lat:47.7461,lng:28.9583,zoom:13},
+  {name:'Кэлэрашь',type:'Город',lat:47.2553,lng:28.3119,zoom:13},
+  {name:'Бендеры',type:'Город',lat:46.8367,lng:29.4814,zoom:13},
+  {name:'M1',type:'Трасса Кишинёв — Бельцы',lat:47.3,lng:28.5,zoom:9},
+  {name:'M2',type:'Трасса Кишинёв — Сорока',lat:47.5,lng:28.7,zoom:9},
+  {name:'M3',type:'Трасса Кишинёв — Кагул',lat:46.3,lng:28.6,zoom:9},
+  {name:'M5',type:'Трасса север-юг (Бельцы — Кишинёв — Тирасполь)',lat:47.2,lng:28.5,zoom:8},
+  {name:'M14',type:'Северный коридор',lat:48.0,lng:27.8,zoom:9},
+  {name:'R1',type:'Кишинёв — Унгены',lat:46.95,lng:28.3,zoom:10},
+  {name:'R6',type:'Орхей — Бельцы',lat:47.5,lng:28.5,zoom:10},
+];
+
+// ═══════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════
+function timeAgo(ts){
+  const m=Math.floor((Date.now()-ts)/60000);
+  if(m<1)return'только что';
+  if(m<60)return m+' мин. назад';
+  const h=Math.floor(m/60);
+  if(h<24)return h+' ч. назад';
+  return Math.floor(h/24)+' дн. назад';
+}
+function showToast(msg,color='#2d7d46'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.style.background=color;t.style.display='block';
+  setTimeout(()=>t.style.display='none',3000);
+}
+function setBanner(txt){
+  const b=document.getElementById('banner');
+  if(txt){b.textContent=txt;b.style.display='block';} else b.style.display='none';
+}
+
+// ═══════════════════════════════════════════════════
+//  MAP & LAYERS
+// ═══════════════════════════════════════════════════
+const map = L.map('map', {zoomControl: false}).setView([47.0, 28.8], 8);
+L.control.zoom({position: 'topright'}).addTo(map);
+
+const TILE_LAYERS = {
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 19
+  }),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '© Esri', maxZoom: 19
+  }),
+  topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenTopoMap', maxZoom: 17
+  }),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+    attribution: '© CARTO', maxZoom: 19
+  }),
+};
+
+let activeLayer = 'osm';
+TILE_LAYERS.osm.addTo(map);
+
+function setLayer(name){
+  if(activeLayer === name) return;
+  map.removeLayer(TILE_LAYERS[activeLayer]);
+  TILE_LAYERS[name].addTo(map);
+  activeLayer = name;
+  document.querySelectorAll('.lp-item').forEach(el=>{
+    el.classList.toggle('active', el.dataset.layer === name);
+  });
+  toggleLayerPicker();
+}
+
+function toggleLayerPicker(){
+  const lp = document.getElementById('layer-picker');
+  lp.style.display = lp.style.display === 'block' ? 'none' : 'block';
+}
+
+// Close layer picker on click outside
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('#layer-picker') && !e.target.closest('#layer-btn')){
+    document.getElementById('layer-picker').style.display='none';
+  }
+});
+
+const pinLayer = L.layerGroup().addTo(map);
+
+// ═══════════════════════════════════════════════════
+//  SEARCH
+// ═══════════════════════════════════════════════════
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+
+searchInput.addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  if(q.length < 1){searchResults.style.display='none'; return;}
+  const matches = PLACES.filter(p=>p.name.toLowerCase().includes(q) || p.type.toLowerCase().includes(q)).slice(0,8);
+  if(!matches.length){searchResults.style.display='none'; return;}
+  searchResults.innerHTML = matches.map((p,i)=>`
+    <div class="sr-item" onclick="goToPlace(${p.lat},${p.lng},${p.zoom})">
+      <div class="sr-name">${p.name}</div>
+      <div class="sr-type">${p.type}</div>
+    </div>
+  `).join('');
+  searchResults.style.display='block';
+});
+
+searchInput.addEventListener('blur', ()=>setTimeout(()=>searchResults.style.display='none', 200));
+searchInput.addEventListener('focus', e => {
+  if(e.target.value.trim()) e.target.dispatchEvent(new Event('input'));
+});
+
+function goToPlace(lat,lng,zoom){
+  map.setView([lat,lng],zoom);
+  searchInput.value='';
+  searchResults.style.display='none';
+}
+
+// ═══════════════════════════════════════════════════
+//  LOCATE ME
+// ═══════════════════════════════════════════════════
+let locateMarker = null;
+function locateMe(){
+  if(!navigator.geolocation){showToast('Геолокация недоступна','#c0392b'); return;}
+  showToast('Определяем местоположение...');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const {latitude, longitude} = pos.coords;
+      if(locateMarker) map.removeLayer(locateMarker);
+      locateMarker = L.circleMarker([latitude,longitude],{
+        radius:9, color:'#fff', weight:3, fillColor:'#2962ff', fillOpacity:1
+      }).addTo(map).bindPopup('Вы здесь');
+      map.setView([latitude,longitude],15);
+      showToast('📍 Найдено!');
+    },
+    err => showToast('Не удалось определить местоположение','#c0392b'),
+    {enableHighAccuracy:true, timeout:10000}
+  );
+}
+
+function resetView(){map.setView([47.0,28.8],8);}
+
+// ═══════════════════════════════════════════════════
+//  MEASURE DISTANCE
+// ═══════════════════════════════════════════════════
+let measuring = false;
+let measurePts = [];
+let measureMarkers = [];
+let measureLine = null;
+
+function toggleMeasure(){
+  if(measuring){stopMeasure(); return;}
+  if(drawing) cancelDraw();
+  measuring = true;
+  measurePts = [];
+  document.getElementById('measure-btn').classList.add('active');
+  document.getElementById('measure-info').style.display='block';
+  document.getElementById('measure-info').textContent='Кликайте точки для измерения. Двойной клик — завершить.';
+  map.getContainer().style.cursor='crosshair';
+}
+
+function stopMeasure(){
+  measuring = false;
+  measureMarkers.forEach(m=>map.removeLayer(m));
+  measureMarkers = [];
+  if(measureLine){map.removeLayer(measureLine); measureLine = null;}
+  measurePts = [];
+  document.getElementById('measure-btn').classList.remove('active');
+  document.getElementById('measure-info').style.display='none';
+  map.getContainer().style.cursor='';
+}
+
+function calcDistance(pts){
+  let total = 0;
+  for(let i=1;i<pts.length;i++){
+    total += map.distance(pts[i-1], pts[i]);
+  }
+  return total;
+}
+
+map.on('dblclick', e => {
+  if(measuring && measurePts.length>=2){
+    L.DomEvent.stopPropagation(e);
+    setTimeout(()=>stopMeasure(),100);
+  }
+});
+
+// ═══════════════════════════════════════════════════
+//  PINS
+// ═══════════════════════════════════════════════════
+let pins = [];
+let drawing = false;
+let selType = null;
+let selSev = null;
+let pendingLatLng = null;
+let currentFilter = 'all';
+
+function makeIcon(type, sev){
+  const ico = TYPES[type]?.ico || '❗';
+  const color = SEV[sev]?.color || '#e07030';
+  const bg = SEV[sev]?.bg || '#fff0e6';
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:36px;height:36px;border-radius:50%;background:${bg};border:2.5px solid ${color};display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,.3)">${ico}</div>`,
+    iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20]
+  });
+}
+
+function renderPin(pin){
+  const t = TYPES[pin.type] || TYPES.other;
+  const s = SEV[pin.sev] || SEV.mid;
+  const marker = L.marker([pin.lat, pin.lng], {icon: makeIcon(pin.type, pin.sev)});
+  marker.bindPopup(`
+    <div style="font-family:-apple-system,sans-serif;min-width:170px">
+      <div style="font-size:22px;margin-bottom:4px">${t.ico}</div>
+      <div style="font-size:14px;font-weight:700;color:#1a1a1a">${t.label}</div>
+      <div style="display:inline-block;font-size:11px;font-weight:700;color:${s.color};background:${s.bg};padding:2px 8px;border-radius:10px;margin:4px 0">${s.label}</div>
+      <div style="font-size:11px;color:#666;margin-top:4px">${pin.name} · ${timeAgo(pin.ts)}</div>
+      ${pin.comment?`<div style="font-size:12px;color:#333;margin-top:6px;font-style:italic;border-top:1px solid #eee;padding-top:6px">«${pin.comment}»</div>`:''}
+      <div style="font-size:10px;color:#aaa;margin-top:6px">📍 ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}</div>
+    </div>
+  `, {maxWidth: 240});
+  pin._marker = marker;
+  pinLayer.addLayer(marker);
+}
+
+function redrawAll(){
+  pinLayer.clearLayers();
+  const filtered = filterPins(pins);
+  filtered.forEach(renderPin);
+}
+
+function filterPins(arr){
+  if(currentFilter==='all') return arr;
+  if(currentFilter==='high') return arr.filter(p=>p.sev==='high');
+  return arr.filter(p=>p.type===currentFilter);
+}
+
+function setFilter(f, btn){
+  currentFilter = f;
+  document.querySelectorAll('.fil-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  redrawAll();
+  renderList();
+}
+
+function toggleDraw(){
+  if(measuring) stopMeasure();
+  if(drawing){cancelDraw(); return;}
+  drawing = true;
+  const fab = document.getElementById('fab');
+  fab.classList.add('cancel');
+  document.getElementById('fab-ico').textContent='✕';
+  document.getElementById('fab-text').textContent='Отмена';
+  map.getContainer().style.cursor='crosshair';
+  setBanner('🖱 Кликните на карте где проблема');
+}
+
+function cancelDraw(){
+  drawing = false;
+  const fab = document.getElementById('fab');
+  fab.classList.remove('cancel');
+  document.getElementById('fab-ico').textContent='⚠️';
+  document.getElementById('fab-text').textContent='Сообщить о проблеме';
+  map.getContainer().style.cursor='';
+  setBanner('');
+}
+
+map.on('click', function(e){
+  if(measuring){
+    const pt = e.latlng;
+    measurePts.push(pt);
+    const m = L.circleMarker(pt,{radius:5,color:'#fff',weight:2,fillColor:'#1a3a26',fillOpacity:1}).addTo(map);
+    measureMarkers.push(m);
+    if(measureLine) map.removeLayer(measureLine);
+    if(measurePts.length>=2){
+      measureLine = L.polyline(measurePts,{color:'#1a3a26',weight:3,dashArray:'6 4'}).addTo(map);
+      const d = calcDistance(measurePts);
+      const txt = d<1000 ? `📏 ${d.toFixed(0)} м` : `📏 ${(d/1000).toFixed(2)} км`;
+      document.getElementById('measure-info').textContent = txt + ' (двойной клик чтобы завершить)';
+    }
+    return;
+  }
+  if(!drawing) return;
+  pendingLatLng = e.latlng;
+  selType = null; selSev = null;
+  document.querySelectorAll('.prob-btn').forEach(b=>b.classList.remove('selected'));
+  document.querySelectorAll('.sev-btn').forEach(b=>b.className='sev-btn');
+  document.getElementById('type-err').textContent='';
+  document.getElementById('sev-err').textContent='';
+  document.getElementById('fcmt').value='';
+  document.getElementById('fname').value='';
+  document.getElementById('modal-coord').textContent=`📍 ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`;
+  document.getElementById('modal').style.display='flex';
+  cancelDraw();
+});
+
+function closeModal(){
+  document.getElementById('modal').style.display='none';
+  pendingLatLng = null;
+}
+
+function selectType(btn){
+  document.querySelectorAll('.prob-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selType = btn.dataset.type;
+  document.getElementById('type-err').textContent='';
+}
+
+function selectSev(btn){
+  document.querySelectorAll('.sev-btn').forEach(b=>b.className='sev-btn');
+  const sev = btn.dataset.sev;
+  btn.classList.add('sel-'+sev);
+  selSev = sev;
+  document.getElementById('sev-err').textContent='';
+}
+
+async function savePin(){
+  if(!pendingLatLng){showToast('Выберите место на карте','#c0392b'); return;}
+  let ok = true;
+  if(!selType){document.getElementById('type-err').textContent='⚠ Выберите тип проблемы'; ok = false;}
+  if(!selSev){document.getElementById('sev-err').textContent='⚠ Выберите серьёзность'; ok = false;}
+  if(!ok) return;
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Отправка...';
+
+  const pin = {
+    lat: pendingLatLng.lat, lng: pendingLatLng.lng,
+    type: selType, sev: selSev,
+    comment: document.getElementById('fcmt').value.trim(),
+    name: document.getElementById('fname').value.trim() || randomName(),
+    ts: Date.now()
+  };
+
+  try {
+    const res = await fetch('/api/pins', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(pin)
+    });
+    if(!res.ok) throw new Error('Server error');
+    const saved = await res.json();
+    pins.unshift(saved);
+    redrawAll(); renderList();
+    closeModal();
+    showToast(`${TYPES[saved.type].ico} Отмечено на карте!`);
+  } catch(err){
+    showToast('Ошибка отправки: '+err.message,'#c0392b');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Отправить ↗';
+  }
+}
+
+function renderList(){
+  const filtered = filterPins(pins);
+  document.getElementById('pcnt').textContent = filtered.length;
+  const el = document.getElementById('plist');
+  if(!filtered.length){
+    el.innerHTML='<div style="padding:20px 14px;font-size:11px;color:#aaa;text-align:center;line-height:1.8">Ничего не найдено.<br>Попробуйте сменить фильтр.</div>';
+    return;
+  }
+  el.innerHTML = filtered.slice(0,100).map(p=>{
+    const t = TYPES[p.type]||TYPES.other;
+    const s = SEV[p.sev]||SEV.mid;
+    return `
+      <div class="pi" onclick="focusPin(${p.id})">
+        <div class="pi-ico">${t.ico}</div>
+        <div class="pi-body">
+          <div class="pi-name">${t.label}<span class="pi-sev" style="color:${s.color}">${s.label}</span></div>
+          <div class="pi-m">${p.name} · ${timeAgo(p.ts)}</div>
+          ${p.comment?`<div class="pi-c">${p.comment}</div>`:''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function focusPin(id){
+  const pin = pins.find(p=>p.id===id);
+  if(pin){
+    map.setView([pin.lat,pin.lng],15);
+    if(pin._marker) pin._marker.openPopup();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  LOAD FROM SERVER
+// ═══════════════════════════════════════════════════
+async function loadPins(){
+  try {
+    const res = await fetch('/api/pins');
+    if(!res.ok) throw new Error();
+    pins = await res.json();
+    redrawAll(); renderList();
+    document.getElementById('live-badge').textContent='● Живые данные';
+    document.getElementById('live-badge').style.background='#e6f4ea';
+    document.getElementById('live-badge').style.color='#1a7a3a';
+  } catch(err) {
+    document.getElementById('live-badge').textContent='⚠ Нет связи';
+    document.getElementById('live-badge').style.background='#fde8e8';
+    document.getElementById('live-badge').style.color='#c0392b';
+  }
+}
+
+loadPins();
+setInterval(loadPins, 30000);
+</script>
+</body>
+</html>
